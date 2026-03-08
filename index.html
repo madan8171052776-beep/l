@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lucky's Pro Wireless Cam</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); }
+        .gradient-bg { background: linear-gradient(135deg, #0f172a, #1e293b, #3b82f6); }
+        video { border-radius: 2rem; background: #000; width: 100%; max-width: 650px; border: 4px solid rgba(255,255,255,0.1); }
+        .mirror { transform: scaleX(-1); }
+        .no-mirror { transform: scaleX(1); }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen p-4 flex flex-col items-center font-sans text-white">
+
+    <div class="max-w-2xl w-full">
+        <!-- Header -->
+        <header class="text-center mb-10 py-6">
+            <h1 class="text-4xl font-black tracking-tighter text-blue-400">LUCKY PRO CAM</h1>
+            <p class="text-gray-400 mt-2 font-medium">Bina Wire ke Video aur Voice Call</p>
+        </header>
+
+        <!-- Setup Panel -->
+        <div id="setup-panel" class="glass p-10 rounded-[2.5rem] shadow-2xl text-center border border-white/10">
+            <h2 class="text-2xl font-bold mb-8 text-gray-800">Connection Mode Chunein</h2>
+            <div class="grid grid-cols-1 gap-6">
+                <button onclick="initRole('sender')" class="bg-blue-600 p-6 rounded-3xl font-bold hover:bg-blue-700 transition shadow-lg flex flex-col items-center">
+                    <span class="text-3xl mb-2">📱</span>
+                    Ye mera MOBILE hai (Camera/Mic Bhejo)
+                </button>
+                <button onclick="initRole('receiver')" class="bg-emerald-600 p-6 rounded-3xl font-bold hover:bg-emerald-700 transition shadow-lg flex flex-col items-center">
+                    <span class="text-3xl mb-2">💻</span>
+                    Ye mera PC hai (Video/Voice Suno)
+                </button>
+            </div>
+            <div class="mt-8 p-4 bg-yellow-50 rounded-2xl border border-yellow-100">
+                <p class="text-yellow-800 text-xs font-semibold">Dhyan dein: Internet ya Wi-Fi dono par chalega.</p>
+            </div>
+        </div>
+
+        <!-- Stream Display -->
+        <div id="stream-panel" class="hidden glass p-8 rounded-[2.5rem] shadow-2xl border border-white/10">
+            <div id="status" class="text-center mb-6 text-blue-600 font-black tracking-widest uppercase animate-pulse">Initializing...</div>
+            
+            <div class="flex justify-center">
+                <video id="main-video" autoplay playsinline muted class="mirror"></video>
+            </div>
+            
+            <div class="mt-8 space-y-4">
+                <div id="sender-controls" class="hidden flex flex-col gap-4">
+                    <button onclick="switchCamera()" class="w-full bg-indigo-600 py-6 rounded-2xl font-black text-xl shadow-xl flex items-center justify-center gap-3">
+                        🔄 CAMERA BADLO (BACK/FRONT)
+                    </button>
+                    <button onclick="location.reload()" class="w-full bg-red-500 py-4 rounded-xl font-bold">Stop Stream</button>
+                </div>
+                
+                <div id="receiver-controls" class="hidden">
+                    <button id="unmute-btn" onclick="unmute()" class="w-full bg-blue-500 py-6 rounded-3xl font-black text-2xl shadow-2xl">
+                        🔊 Sound On Karein
+                    </button>
+                    <p class="text-center text-gray-500 mt-4 text-sm">PC par awaaz ke liye button dabayein.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script>
+        let peer;
+        let currentStream;
+        let facingMode = "user"; 
+        // Unique Secret ID based on your hostname
+        const peerId = "lucky-pro-global-" + window.location.hostname.replace(/\./g, '-'); 
+
+        function initRole(role) {
+            document.getElementById('setup-panel').classList.add('hidden');
+            document.getElementById('stream-panel').classList.remove('hidden');
+            if (role === 'sender') setupSender();
+            else setupReceiver();
+        }
+
+        async function setupSender() {
+            document.getElementById('sender-controls').classList.remove('hidden');
+            document.getElementById('status').innerText = "Camera Start ho raha hai...";
+
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            try {
+                currentStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: facingMode }, 
+                    audio: true 
+                }).catch(() => {
+                    return navigator.mediaDevices.getUserMedia({ video: { facingMode: facingMode }, audio: false });
+                });
+
+                const video = document.getElementById('main-video');
+                video.srcObject = currentStream;
+                
+                if (facingMode === "user") {
+                    video.classList.add('mirror');
+                } else {
+                    video.classList.remove('mirror');
+                }
+
+                if (!peer) {
+                    peer = new Peer(); 
+                    peer.on('open', (id) => {
+                        document.getElementById('status').innerText = "Connecting to PC...";
+                        connectToReceiver();
+                    });
+                    
+                    peer.on('error', (err) => {
+                        console.error(err);
+                        document.getElementById('status').innerText = "Error: " + err.type;
+                    });
+                } else {
+                    connectToReceiver();
+                }
+            } catch (err) {
+                alert("Permission Allow karein! Camera nahi mil raha.");
+            }
+        }
+
+        function connectToReceiver() {
+            const call = peer.call(peerId, currentStream);
+            if (call) {
+                document.getElementById('status').innerText = "Streaming LIVE! ✅";
+            }
+        }
+
+        function switchCamera() {
+            facingMode = (facingMode === "user") ? "environment" : "user";
+            setupSender();
+        }
+
+        function setupReceiver() {
+            document.getElementById('receiver-controls').classList.remove('hidden');
+            document.getElementById('status').innerText = "PC: Waiting for Mobile...";
+
+            peer = new Peer(peerId); 
+
+            peer.on('open', (id) => {
+                document.getElementById('status').innerText = "PC Taiyar hai! Mobile se connect karein.";
+            });
+
+            peer.on('call', (call) => {
+                document.getElementById('status').innerText = "Connecting...";
+                call.answer(); 
+                
+                call.on('stream', (remoteStream) => {
+                    const video = document.getElementById('main-video');
+                    video.srcObject = remoteStream;
+                    video.classList.remove('mirror'); 
+                    document.getElementById('status').innerText = "Connected! 🎥";
+                });
+            });
+
+            peer.on('error', (err) => {
+                if(err.type === 'unavailable-id') {
+                    document.getElementById('status').innerText = "ID Busy. Refreshing...";
+                    setTimeout(() => location.reload(), 2000);
+                }
+            });
+        }
+
+        function unmute() {
+            const video = document.getElementById('main-video');
+            video.muted = false;
+            video.volume = 1.0;
+            document.getElementById('unmute-btn').innerText = "Awaaz ON hai! ✅";
+        }
+    </script>
+</body>
+</html>
